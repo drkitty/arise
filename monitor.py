@@ -6,9 +6,6 @@ from sys import stdout
 from time import sleep
 
 
-bit_bucket = open('/dev/null', 'w')
-
-
 monitor_p = Popen(('stdbuf', '-oL', 'udevadm', 'monitor', '-k'), stdout=PIPE,
           stderr=PIPE, bufsize=1)
 
@@ -47,6 +44,8 @@ def get_dev_identifier(path):
 
 
 def monitor_loop():
+
+
     plugged = {}
 
     for monitor_line in iter(monitor_p.stdout.readline, b''):
@@ -54,8 +53,9 @@ def monitor_loop():
         if m:
             path = m.groupdict()['path']
 
-            Popen(('udevadm', 'settle'), stdout=bit_bucket,
-                  stderr=bit_bucket).wait()
+            with open('/dev/null', 'w') as devnull:
+                Popen(('udevadm', 'settle'), stdout=devnull,
+                      stderr=STDOUT).wait()
 
             iden = get_dev_identifier(path)
             #stdout.write('{} inserted\n'.format(iden))
