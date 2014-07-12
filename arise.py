@@ -5,7 +5,7 @@ import re
 import select
 import socket
 from subprocess import Popen, PIPE, STDOUT
-from sys import stdout
+from sys import stderr, stdout
 from time import sleep
 
 
@@ -62,6 +62,108 @@ def handle_monitor_event(monitor_line, plugged):
         return
 
 
+def receive_message(client):
+    def get(count):
+        msg = b''
+        while True:
+            chunk = client.recv(count - len(msg))
+            msg += chunk
+            if len(msg) < count:
+                yield
+            else:
+                yield msg
+
+    command_len = ''
+    while True:
+        for c in get(1):
+            if c:
+                break
+            else:
+                yield
+        c.decode('ascii')
+        if '0' <= c <= '9':
+            command_len += c
+        elif c == ':':
+            break
+        else:
+            stderr.write('Malformed message (expected digit or colon)\n')
+            yield ''
+    command_len = int(command_len)
+
+    for command in get(command_len):
+        if command:
+            break
+        else:
+            yield
+    try:
+        message = [command.decode('utf_8')]
+    except UnicodeDecodeError:
+        stderr.write('Malformed message (invalid UTF-8)\n')
+        yield ''
+    print 'Command is "{}"'.format(command)
+
+    while True:
+        for c in get(1):
+            if c:
+                break
+            else:
+                yield
+        c = c.decode('ascii')
+        if c != ' ':  # argument delimiter (for humans, not computers)
+            stderr.write('Malformed message (missing space)\n')
+
+        for c in get(1):
+            if c:
+                break
+            else:
+                yield
+        c = c.decode('ascii')
+        if c == '$':  # end of message
+            yield message
+
+        arg_len = c
+        while True:
+            for c in get(1):
+                if c:
+                    break
+                else:
+                    yield
+            c = c.decode('ascii')
+            if '0' <= c <= '9':
+                arg_len += c
+            elif c == ':':
+                break
+            else:
+                stderr.write('arg_len = {}'.format(arg_len))
+                stderr.write('Malformed message (expected digit or colon)\n')
+                yield ''
+        arg_len = int(arg_len)
+
+        for arg in get(arg_len):
+            if arg:
+                break
+            else:
+                yield
+        try:
+            arg = arg.decode('utf_8')
+        except UnicodeDecodeError:
+            stderr.write('Malformed message (invalid UTF-8)\n')
+            yield ''
+
+        message.append(arg)
+
+
+def handle_message(fd, client, waiting):
+    if fd not in waiting:
+        waiting[fd] = receive_message(client)
+    ret = next(waiting[fd])
+    if ret is None:
+        return
+    if ret == '':
+        del waiting[fd]
+        return
+
+
 def main_event_loop():
     poller = select.poll()
 
@@ -81,6 +183,7 @@ def main_event_loop():
 
     plugged = {}
     clients = {}
+    waiting = {}
 
     while True:
         events = poller.poll()
@@ -94,13 +197,13 @@ def main_event_loop():
                 clients[s.fileno()] = s
             elif fd in clients:
                 if kind & select.POLLHUP:
+                    handle_message(fd, clients[fd], waiting)
                     print 'Socket with fd {} died'.format(fd)
                     poller.unregister(fd)
                     del clients[fd]
+                    waiting.pop(fd, None)
                 elif kind & select.POLLIN:
-                    #handle_message(clients[fd])
-                    print 'Message from socket with fd {} reads "{}"'.format(
-                        fd, clients[fd].recv(3))
+                    handle_message(fd, clients[fd], waiting)
                 else:
                     raise Exception('An unacceptable state of affairs has '
                                     'occurred')
