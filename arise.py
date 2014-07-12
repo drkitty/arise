@@ -162,8 +162,11 @@ def handle_message(fd, client, waiting):
     ret = next(waiting[fd])
     if ret is None:
         return
+    del waiting[fd]
     if ret == '':
-        del waiting[fd]
+        return
+    else:
+        print 'Received message "{}" on socket with fd {}'.format(ret, fd)
         return
 
 
