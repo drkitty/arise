@@ -6,22 +6,10 @@ from sys import stdout
 from time import sleep
 
 
-monitor_p = Popen(('stdbuf', '-oL', 'udevadm', 'monitor', '-k'), stdout=PIPE,
-          stderr=PIPE, bufsize=1)
-
-
 block_add_pattern = re.compile(
     r'KERNEL\[[^]]*\]\s*add\s*(?P<path>\S*)\s*\(block\)')
 block_remove_pattern = re.compile(
     r'KERNEL\[[^]]*\]\s*remove\s*(?P<path>\S*)\s*\(block\)')
-
-
-info_uuid_pattern = re.compile(
-    r'S:\s*disk/by-uuid/(?P<uuid>\S*)')
-info_label_pattern = re.compile(
-    r'S:\s*disk/by-label/(?P<label>\S*)')
-info_name_pattern = re.compile(
-    r'N:\s*(?P<name>\S*)')
 
 
 def get_dev_identifier(path):
@@ -47,8 +35,6 @@ def get_dev_identifier(path):
 
 
 def monitor_loop():
-
-
     plugged = {}
 
     monitor_p = Popen(('stdbuf', '-oL', 'udevadm', 'monitor', '-k'),
@@ -64,8 +50,8 @@ def monitor_loop():
 
             iden = get_dev_identifier(path)
             #stdout.write('{} inserted\n'.format(iden))
-            print plugged
             plugged[path] = iden
+            print plugged
 
         m = block_remove_pattern.match(monitor_line)
         if m:
