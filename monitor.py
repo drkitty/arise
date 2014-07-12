@@ -25,20 +25,23 @@ info_name_pattern = re.compile(
 
 
 def get_dev_identifier(path):
-    info_p = Popen(('udevadm', 'info', '-p', path), stdout=PIPE,
-              stderr=PIPE)
-    info, _ = info_p.communicate()
-    info = info.decode('string_escape').decode('utf_8')
-
     identifier = {}
 
-    for info_line in info.splitlines():
-        for pattern in (info_uuid_pattern, info_label_pattern,
-                info_name_pattern):
-            m = pattern.match(info_line)
-            if m is not None:
-                identifier.update(m.groupdict())
-                break
+    name_p = Popen(('udevadm', 'info', '-q', 'name', '-p', path), stdout=PIPE,
+              stderr=PIPE)
+    name, _ = name_p.communicate()
+    identifier['name'] = name.split()
+
+    symlinks_p = Popen(('udevadm', 'info', '-q', 'symlink', '-p', path),
+        stdout=PIPE, stderr=PIPE)
+    symlinks, _ = symlinks_p.communicate()
+    for symlink in symlinks.split():
+        symlink = symlink[len('disk/'):]
+        kind, value = symlink.split(b'/')
+        kind = kind[len('by-'):].decode('utf_8')
+        value = value.decode('string_escape').decode('utf_8')
+        if kind in ('uuid', 'label'):
+            identifier[kind] = value
 
     return identifier
 
@@ -48,6 +51,8 @@ def monitor_loop():
 
     plugged = {}
 
+    monitor_p = Popen(('stdbuf', '-oL', 'udevadm', 'monitor', '-k'),
+                      stdout=PIPE, stderr=PIPE, bufsize=1)
     for monitor_line in iter(monitor_p.stdout.readline, b''):
         m = block_add_pattern.match(monitor_line)
         if m:
@@ -66,7 +71,7 @@ def monitor_loop():
         if m:
             path = m.groupdict()['path']
             iden = plugged.pop(path, None)
-            if iden:
+            if iden is not None:
                 #stdout.write('{} removed\n'.format(iden))
                 print plugged
 
