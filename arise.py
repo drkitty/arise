@@ -109,21 +109,12 @@ def receive_message(client):
             else:
                 yield
         c = c.decode('ascii')
-        if c != ' ':  # argument delimiter (for humans, not computers)
-            stderr.write('Malformed message (missing space)\n')
-
-        for c in get(1):
-            if c:
-                break
-            else:
-                yield
-        c = c.decode('ascii')
         if c == '$':  # end of message
             yield message
         elif '0' <= c <= '9':
             arg_len = c
         else:
-            stderr.write('Malformed message (expected digit or colon)\n')
+            stderr.write('Malformed message (expected digit, ":", or "$")\n')
             yield ''
 
         while True:

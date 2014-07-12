@@ -10,7 +10,7 @@ def mount(s, at, uuid=None, label=None, name=None):
         if value is not None:
             value = value.encode('utf_8')
             at = at.encode('utf_8')
-            msg = b'5:mount {0}:{1}={2} {3}:at={4} $'.format(
+            msg = b'5:mount{0}:{1}={2}{3}:at={4}$'.format(
                 len(name + value) + 1, name, value,
                 len(b'at' + at) + 1, at)
             print repr(msg)
