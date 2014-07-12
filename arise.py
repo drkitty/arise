@@ -120,8 +120,12 @@ def receive_message(client):
         c = c.decode('ascii')
         if c == '$':  # end of message
             yield message
+        elif '0' <= c <= '9':
+            arg_len = c
+        else:
+            stderr.write('Malformed message (expected digit or colon)\n')
+            yield ''
 
-        arg_len = c
         while True:
             for c in get(1):
                 if c:
