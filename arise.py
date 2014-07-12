@@ -212,10 +212,10 @@ def main_event_loop():
                     handle_message(fd, clients[fd], waiting)
                 else:
                     raise Exception('An unacceptable state of affairs has '
-                                    'occurred')
+                                    'arisen')
             else:
                 raise Exception('An unacceptable state of affairs has '
-                                'occurred')
+                                'arisen')
 
 
 if __name__ == '__main__':
