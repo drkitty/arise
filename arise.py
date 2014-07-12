@@ -62,6 +62,7 @@ def handle_monitor_event(monitor_line, plugged):
         return
 
 
+# FIXME: Review and possibly refactor.
 def receive_message(client):
     def get(count):
         msg = b''
@@ -100,7 +101,6 @@ def receive_message(client):
     except UnicodeDecodeError:
         stderr.write('Malformed message (invalid UTF-8)\n')
         yield ''
-    print 'Command is "{}"'.format(command)
 
     while True:
         for c in get(1):
@@ -134,7 +134,6 @@ def receive_message(client):
             elif c == ':':
                 break
             else:
-                stderr.write('arg_len = {}'.format(arg_len))
                 stderr.write('Malformed message (expected digit or colon)\n')
                 yield ''
         arg_len = int(arg_len)
