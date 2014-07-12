@@ -2,7 +2,7 @@
 from __future__ import unicode_literals
 
 import socket
-import time
+from time import sleep
 
 
 def mount(s, at, uuid=None, label=None, name=None):
@@ -14,7 +14,9 @@ def mount(s, at, uuid=None, label=None, name=None):
                 len(name + value) + 1, name, value,
                 len(b'at' + at) + 1, at)
             print repr(msg)
-            s.sendall(msg)
+            s.sendall(msg[0:9])
+            sleep(1)
+            s.sendall(msg[9:])
             return
 
 
@@ -22,7 +24,7 @@ def main():
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.connect('/tmp/arise.sock')
     mount(s, '/mnt/place', label='UFDé')
-    time.sleep(1)
+    sleep(1)
 
 
 if __name__ == '__main__':
