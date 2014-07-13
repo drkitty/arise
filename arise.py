@@ -193,8 +193,8 @@ def main_event_loop():
                 poller.register(s, select.POLLIN | select.POLLHUP)
                 clients[s.fileno()] = s
             elif fd in clients:
-                if kind & select.POLLHUP:
-                    handle_message(fd, clients[fd], waiting)
+                if kind & select.POLLHUP and not (kind & select.POLLIN and
+                        clients[fd].recv(1, socket.MSG_PEEK)):
                     print 'Socket with fd {} died'.format(fd)
                     poller.unregister(fd)
                     del clients[fd]
