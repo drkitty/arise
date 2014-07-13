@@ -191,7 +191,7 @@ def main_event_loop():
     poller = select.poll()
 
     monitor = Popen(('stdbuf', '-oL', 'udevadm', 'monitor', '-k'),
-                      stdout=PIPE, stderr=PIPE, bufsize=1)
+                      stdout=PIPE, stderr=PIPE)
     poller.register(monitor.stdout, select.POLLIN)
 
     socket_master = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -213,9 +213,7 @@ def main_event_loop():
         events = poller.poll()
         for fd, kind in events:
             if fd == monitor.stdout.fileno():
-                line = monitor.stdout.readline()
-                stdout.write(line)
-                handle_monitor_event(line, plugged)
+                handle_monitor_event(monitor.stdout.readline(), plugged)
             elif fd == socket_master.fileno():
                 s, _ = socket_master.accept()
                 print 'New socket with fd {}'.format(s.fileno())
