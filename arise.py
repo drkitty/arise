@@ -21,11 +21,12 @@ def get_dev_identifier(path):
     name_p = Popen(('udevadm', 'info', '-q', 'name', '-p', path), stdout=PIPE,
               stderr=PIPE)
     name, _ = name_p.communicate()
-    identifier['name'] = name.split()
+    identifier['name'] = name.strip()
 
     symlinks_p = Popen(('udevadm', 'info', '-q', 'symlink', '-p', path),
         stdout=PIPE, stderr=PIPE)
     symlinks, _ = symlinks_p.communicate()
+    symlinks.strip()
     for symlink in symlinks.split():
         symlink = symlink[len('disk/'):]
         kind, value = symlink.split(b'/')
@@ -100,10 +101,11 @@ def receive_message(client):
         else:
             yield
     try:
-        message = [command.decode('utf_8')]
+        command = command.decode('utf_8')
     except UnicodeDecodeError:
         raise InvalidMessaged('Invalid UTF-8')
 
+    args = {}
     while True:
         for c in get(1):
             if c:
@@ -112,7 +114,7 @@ def receive_message(client):
                 yield
         c = c.decode('ascii')
         if c == '$':  # end of message
-            yield message
+            yield command, args
         elif '0' <= c <= '9':
             arg_len = c
         else:
@@ -141,24 +143,22 @@ def receive_message(client):
         try:
             arg = arg.decode('utf_8')
         except UnicodeDecodeError:
-            stderr.write('Malformed message (invalid UTF-8)\n')
-            yield ''
+            raise InvalidMessage('Invalid UTF-8')
 
-        message.append(arg)
+        key, value = arg.split('=', 1)
+        args[key] = value
 
 
 def handle_message(fd, client, waiting):
     if fd not in waiting:
         waiting[fd] = receive_message(client)
     ret = next(waiting[fd])
+
     if ret is None:
         return
+
     del waiting[fd]
-    if ret == '':
-        return
-    else:
-        print 'Received message "{}" on socket with fd {}'.format(ret, fd)
-        return
+    return ret
 
 
 def main_event_loop():
@@ -175,6 +175,7 @@ def main_event_loop():
         if e.errno != 2:  # "No such file or directory"
             raise
     socket_master.bind('/tmp/arise.sock')
+    os.chmod('/tmp/arise.sock', 0666)
     socket_master.listen(1)
     poller.register(socket_master, select.POLLIN)
 
