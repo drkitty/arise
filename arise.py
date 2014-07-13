@@ -182,7 +182,33 @@ def handle_command(client, plugged, command, args):
             return
 
         dev_path = '/dev/' + matches[0]['name']
-        subprocess.call(('mount', dev_path, at))
+        if subprocess.call(('mount', dev_path, at)) == 0:
+            matches[0]['at'] = at
+        else:
+            stderr.write('mount failed\n')
+    elif command == 'unmount':
+        def f(dev):
+            for field, value in args.iteritems():
+                if field in dev and dev[field] == value:
+                    return True
+            return False
+        matches = filter(f, plugged.itervalues())
+
+        if len(matches) > 1:
+            stderr.write('More than one device matched\n')
+            return
+        if len(matches) == 0:
+            stderr.write('No devices matched\n')
+            return
+
+        dev_path = '/dev/' + matches[0]['name']
+        if subprocess.call(('umount', dev_path)) == 0:
+            del matches[0]['at']
+        else:
+            stderr.write('unmount failed\n')
+    else:
+        stderr.write('command not recognized\n')
+
 
 
 def main_event_loop():
