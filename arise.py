@@ -62,6 +62,10 @@ def handle_monitor_event(monitor_line, plugged):
         return
 
 
+class InvalidMessage(Exception):
+    pass
+
+
 # FIXME: Review and possibly refactor.
 def receive_message(client):
     def get(count):
@@ -87,8 +91,7 @@ def receive_message(client):
         elif c == ':':
             break
         else:
-            stderr.write('Malformed message (expected digit or colon)\n')
-            yield ''
+            raise InvalidMessage('Expected digit or ":"')
     command_len = int(command_len)
 
     for command in get(command_len):
@@ -99,8 +102,7 @@ def receive_message(client):
     try:
         message = [command.decode('utf_8')]
     except UnicodeDecodeError:
-        stderr.write('Malformed message (invalid UTF-8)\n')
-        yield ''
+        raise InvalidMessaged('Invalid UTF-8')
 
     while True:
         for c in get(1):
@@ -114,8 +116,7 @@ def receive_message(client):
         elif '0' <= c <= '9':
             arg_len = c
         else:
-            stderr.write('Malformed message (expected digit, ":", or "$")\n')
-            yield ''
+            raise InvalidMessage('Expected digit, ":", or "$"')
 
         while True:
             for c in get(1):
@@ -129,8 +130,7 @@ def receive_message(client):
             elif c == ':':
                 break
             else:
-                stderr.write('Malformed message (expected digit or colon)\n')
-                yield ''
+                raise InvalidMessage('Expected digit or ":"')
         arg_len = int(arg_len)
 
         for arg in get(arg_len):
@@ -200,7 +200,15 @@ def main_event_loop():
                     del clients[fd]
                     waiting.pop(fd, None)
                 elif kind & select.POLLIN:
-                    handle_message(fd, clients[fd], waiting)
+                    try:
+                        handle_message(fd, clients[fd], waiting)
+                    except InvalidMessage as e:
+                        stderr.write('Invalid message ({})\n'.format(
+                            e.message))
+                        poller.unregister(fd)
+                        del clients[fd]
+                        waiting.pop(fd, None)
+                        print 'Killed socket with fd {}'.format(fd)
                 else:
                     raise Exception('An unacceptable state of affairs has '
                                     'arisen')
