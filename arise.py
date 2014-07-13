@@ -49,9 +49,8 @@ def handle_monitor_event(monitor_line, plugged):
                   stderr=STDOUT).wait()
 
         iden = get_dev_identifier(path)
-        #stdout.write('{} inserted\n'.format(iden))
+        stdout.write('inserted {}\n'.format(iden))
         plugged[path] = iden
-        print plugged
         return
 
     m = block_remove_pattern.match(monitor_line)
@@ -59,8 +58,7 @@ def handle_monitor_event(monitor_line, plugged):
         path = m.groupdict()['path']
         iden = plugged.pop(path, None)
         if iden is not None:
-            #stdout.write('{} removed\n'.format(iden))
-            print plugged
+            stdout.write('removed {}\n'.format(iden))
         return
 
 
