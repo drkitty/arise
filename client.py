@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import socket
+from sys import argv
 from time import sleep
 
 
@@ -23,9 +24,10 @@ def send_command(s, command, **kwargs):
 def main():
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.connect('/tmp/arise.sock')
-    send_command(s, 'mount', at='/mnt/place', label='UFDé')
-    send_command(s, 'umount', label='UFDé')
-    sleep(1)
+
+    command = argv[1]
+    args = dict(arg.split('=', 1) for arg in argv[2:])
+    send_command(s, command, **args)
 
 if __name__ == '__main__':
     main()
