@@ -4,6 +4,7 @@ import os
 import re
 import select
 import socket
+import subprocess
 from subprocess import Popen, PIPE, STDOUT
 from sys import stderr, stdout
 from time import sleep
@@ -161,6 +162,31 @@ def handle_message(fd, client, waiting):
     return ret
 
 
+def handle_command(client, plugged, command, args):
+    if command == 'mount':
+        at = args.pop('at', None)
+        if at is None:
+            stderr.write('"at" argument is required\n')
+            return
+
+        def f(dev):
+            for field, value in args.iteritems():
+                if field in dev and dev[field] == value:
+                    return True
+            return False
+        matches = filter(f, plugged.itervalues())
+
+        if len(matches) > 1:
+            stderr.write('More than one device matched\n')
+            return
+        if len(matches) == 0:
+            stderr.write('No devices matched\n')
+            return
+
+        dev_path = '/dev/' + matches[0]['name']
+        subprocess.call(('mount', dev_path, at))
+
+
 def main_event_loop():
     poller = select.poll()
 
@@ -187,7 +213,9 @@ def main_event_loop():
         events = poller.poll()
         for fd, kind in events:
             if fd == monitor.stdout.fileno():
-                handle_monitor_event(monitor.stdout.readline(), plugged)
+                line = monitor.stdout.readline()
+                stdout.write(line)
+                handle_monitor_event(line, plugged)
             elif fd == socket_master.fileno():
                 s, _ = socket_master.accept()
                 print 'New socket with fd {}'.format(s.fileno())
@@ -202,7 +230,7 @@ def main_event_loop():
                     waiting.pop(fd, None)
                 elif kind & select.POLLIN:
                     try:
-                        handle_message(fd, clients[fd], waiting)
+                        ret = handle_message(fd, clients[fd], waiting)
                     except InvalidMessage as e:
                         stderr.write('Invalid message ({})\n'.format(
                             e.message))
@@ -210,6 +238,11 @@ def main_event_loop():
                         del clients[fd]
                         waiting.pop(fd, None)
                         print 'Killed socket with fd {}'.format(fd)
+
+                    if ret is not None:
+                        command, args = ret
+                        print '({}, {})'.format(command, args)
+                        handle_command(clients[fd], plugged, command, args)
                 else:
                     raise Exception('An unacceptable state of affairs has '
                                     'arisen')
