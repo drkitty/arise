@@ -181,7 +181,6 @@ def handle_command(client, plugged, command, args):
         stderr.write('command not recognized\n')
 
 
-
 def main_event_loop():
     poller = select.poll()
 
