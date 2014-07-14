@@ -95,10 +95,7 @@ def receive_message(client):
             break
         else:
             yield
-    try:
-        command = command.decode('utf_8')
-    except UnicodeDecodeError:
-        raise InvalidMessaged('Invalid UTF-8')
+    command = command.decode('utf_8')
 
     args = {}
     while True:
@@ -116,10 +113,7 @@ def receive_message(client):
                 break
             else:
                 yield
-        try:
-            arg = arg.decode('utf_8')
-        except UnicodeDecodeError:
-            raise InvalidMessage('Invalid UTF-8')
+        arg = arg.decode('utf_8')
 
         key, value = arg.split('=', 1)
         args[key] = value
