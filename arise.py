@@ -78,21 +78,17 @@ def receive_message(client):
             else:
                 yield msg
 
-    command_len = ''
-    while True:
-        for c in get(1):
-            if c:
-                break
-            else:
-                yield
-        c.decode('ascii')
-        if '0' <= c <= '9':
-            command_len += c
-        elif c == ':':
+    def decode_length(encoded):
+        return ord(encoded[0]) ** 2**8 + ord(encoded[1])
+
+    for command_len in get(2):
+        if command_len:
             break
         else:
-            raise InvalidMessage('Expected digit or ":"')
-    command_len = int(command_len)
+            yield
+    command_len = decode_length(command_len)
+    if command_len == 0:
+        raise InvalidMessage('Empty command')
 
     for command in get(command_len):
         if command:
@@ -106,33 +102,14 @@ def receive_message(client):
 
     args = {}
     while True:
-        for c in get(1):
-            if c:
+        for arg_len in get(2):
+            if arg_len:
                 break
             else:
                 yield
-        c = c.decode('ascii')
-        if c == '$':  # end of message
+        arg_len = decode_length(arg_len)
+        if arg_len == 0:
             yield command, args
-        elif '0' <= c <= '9':
-            arg_len = c
-        else:
-            raise InvalidMessage('Expected digit, ":", or "$"')
-
-        while True:
-            for c in get(1):
-                if c:
-                    break
-                else:
-                    yield
-            c = c.decode('ascii')
-            if '0' <= c <= '9':
-                arg_len += c
-            elif c == ':':
-                break
-            else:
-                raise InvalidMessage('Expected digit or ":"')
-        arg_len = int(arg_len)
 
         for arg in get(arg_len):
             if arg:

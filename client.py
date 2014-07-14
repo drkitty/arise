@@ -7,17 +7,21 @@ from time import sleep
 
 
 def send_command(s, command, **kwargs):
+    def encode_length(length):
+        return chr(length / 2**8) + chr(length % 2**8)
+
     command = command.encode('utf_8')
-    msg = b'{}:{}'.format(len(command), command)
+    msg = b'{}{}'.format(encode_length(len(command)), command)
 
     for key, value in kwargs.iteritems():
         key = key.encode('utf_8')
         value = value.encode('utf_8')
-        msg += b'{}:{}={}'.format(len(key) + len(value) + 1, key, value)
+        msg += b'{}{}={}'.format(encode_length(len(key) + len(value) + 1),
+                                 key, value)
 
-    msg += b'$'
+    msg += b'\x00\x00'
 
-    print msg
+    print repr(msg)
     s.sendall(msg)
 
 
