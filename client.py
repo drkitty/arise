@@ -48,6 +48,7 @@ def main():
     for c in ('mount', 'unmount', 'automount', 'show'):
         if getattr(args, c):
             command = c
+            break
 
     filters = {}
     for f in ('uuid', 'label', 'name'):
