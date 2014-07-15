@@ -22,7 +22,7 @@ def SocketWrapper(object):
         sent = self.sock.send(self.msg)
         self.msg = self.msg[sent:]
 
-        if sent < len(msg):
+        if sent < len(self.msg):
             if fd not in self.waiting_to_send:
                 self.waiting_to_send[sock.fileno()] = self
             return False
