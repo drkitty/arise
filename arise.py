@@ -200,8 +200,8 @@ def main_event_loop():
     poller.register(socket_master, select.POLLIN)
 
     plugged = {}
-    clients = {}
-    waiting = {}
+    sockets = {}
+    waiting_to_send = {}
 
     while True:
         events = poller.poll()
