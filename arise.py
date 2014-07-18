@@ -9,6 +9,8 @@ from subprocess import Popen, PIPE, STDOUT
 from sys import stderr, stdout
 from time import sleep
 
+from common import PollWrapper, SocketWrapper
+
 
 block_add_pattern = re.compile(
     r'KERNEL\[[^]]*\]\s*add\s*(?P<path>\S*)\s*\(block\)')
@@ -16,16 +18,89 @@ block_remove_pattern = re.compile(
     r'KERNEL\[[^]]*\]\s*remove\s*(?P<path>\S*)\s*\(block\)')
 
 
+class ServerSocketWrapper(SocketWrapper):
+    def interact(self):
+        pass  # TODO
+
+    def handle_command_generator(self, command, args, plugged):
+        if command == 'mount':
+            at = args.pop('at', None)
+            if at is None:
+                self.prepare_send(
+                    'error', desc='The "at" argument is required.')
+                yield
+
+            def f(dev):
+                for field, value in args.iteritems():
+                    if field in dev and dev[field] == value:
+                        return True
+                return False
+            matches = filter(f, plugged.itervalues())
+
+            if len(matches) > 1:
+                self.prepare_send('error', desc='Multiple devices matched')
+                while self.send_message() is None:
+                    yield
+            if len(matches) == 0:
+                sw.prepare_send('error', desc='No devices matched')
+                while self.send_message() is None:
+                    yield
+
+            dev_path = '/dev/' + matches[0]['name']
+            # FIXME: Fork or something.
+            if subprocess.call(('mount', dev_path, at)) == 0:
+                matches[0]['at'] = at
+                raise StopIteration
+            else:
+                self.prepare_send('error', desc='Mount failed')
+                while self.send_message() is None:
+                    yield
+                raise StopIteration
+        elif command == 'unmount':
+            def f(dev):
+                for field, value in args.iteritems():
+                    if field in dev and dev[field] == value:
+                        return True
+                return False
+            matches = filter(f, plugged.itervalues())
+
+            if len(matches) > 1:
+                self.prepare_send('error', desc='Multiple devices matched')
+                while self.send_message() is None:
+                    yield
+            if len(matches) == 0:
+                self.prepare_send('error', desc='No devices matched')
+                while self.send_message() is None:
+                    yield
+
+            dev_path = '/dev/' + matches[0]['name']
+            # FIXME: Fork or something.
+            if subprocess.call(('umount', dev_path)) == 0:
+                del matches[0]['at']
+                raise StopIteration
+            else:
+                self.prepare_send('error', desc='umount failed')
+                while self.send_message() is None:
+                    yield
+        else:
+            self.prepare_send('error', desc='Invalid command')
+            while self.send_message() is None:
+                yield
+
+    def prepare_handle_command(self, command, args, plugged):
+        if not self.command_handler
+
+
 def get_dev_identifier(path):
     identifier = {}
 
     name_p = Popen(('udevadm', 'info', '-q', 'name', '-p', path), stdout=PIPE,
-              stderr=PIPE)
+                   stderr=PIPE)
     name, _ = name_p.communicate()
     identifier['name'] = name.strip()
 
     symlinks_p = Popen(('udevadm', 'info', '-q', 'symlink', '-p', path),
-        stdout=PIPE, stderr=PIPE)
+                       stdout=PIPE, stderr=PIPE)
     symlinks, _ = symlinks_p.communicate()
     symlinks.strip()
     for symlink in symlinks.split():
@@ -66,12 +141,11 @@ class InvalidMessage(Exception):
     pass
 
 
-# FIXME: Review and possibly refactor.
-def receive_message(client):
+def receive_message(s):
     def get(count):
         msg = b''
         while True:
-            chunk = client.recv(count - len(msg))
+            chunk = s.recv(count - len(msg))
             msg += chunk
             if len(msg) < count:
                 yield
@@ -119,73 +193,11 @@ def receive_message(client):
         args[key] = value
 
 
-def handle_message(fd, client, waiting):
-    if fd not in waiting:
-        waiting[fd] = receive_message(client)
-    ret = next(waiting[fd])
-
-    if ret is None:
-        return
-
-    del waiting[fd]
-    return ret
-
-
-def handle_command(client, plugged, command, args):
-    if command == 'mount':
-        at = args.pop('at', None)
-        if at is None:
-            stderr.write('"at" argument is required\n')
-            return
-
-        def f(dev):
-            for field, value in args.iteritems():
-                if field in dev and dev[field] == value:
-                    return True
-            return False
-        matches = filter(f, plugged.itervalues())
-
-        if len(matches) > 1:
-            stderr.write('More than one device matched\n')
-            return
-        if len(matches) == 0:
-            stderr.write('No devices matched\n')
-            return
-
-        dev_path = '/dev/' + matches[0]['name']
-        if subprocess.call(('mount', dev_path, at)) == 0:
-            matches[0]['at'] = at
-        else:
-            stderr.write('mount failed\n')
-    elif command == 'unmount':
-        def f(dev):
-            for field, value in args.iteritems():
-                if field in dev and dev[field] == value:
-                    return True
-            return False
-        matches = filter(f, plugged.itervalues())
-
-        if len(matches) > 1:
-            stderr.write('More than one device matched\n')
-            return
-        if len(matches) == 0:
-            stderr.write('No devices matched\n')
-            return
-
-        dev_path = '/dev/' + matches[0]['name']
-        if subprocess.call(('umount', dev_path)) == 0:
-            del matches[0]['at']
-        else:
-            stderr.write('unmount failed\n')
-    else:
-        stderr.write('command not recognized\n')
-
-
 def main_event_loop():
-    poller = select.poll()
+    poller = PollWrapper()
 
     monitor = Popen(('stdbuf', '-oL', 'udevadm', 'monitor', '-k'),
-                      stdout=PIPE, stderr=PIPE)
+                    stdout=PIPE, stderr=PIPE)
     poller.register(monitor.stdout, select.POLLIN)
 
     socket_master = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -200,8 +212,7 @@ def main_event_loop():
     poller.register(socket_master, select.POLLIN)
 
     plugged = {}
-    sockets = {}
-    waiting_to_send = {}
+    clients = {}
 
     while True:
         events = poller.poll()
@@ -209,35 +220,28 @@ def main_event_loop():
             if fd == monitor.stdout.fileno():
                 handle_monitor_event(monitor.stdout.readline(), plugged)
             elif fd == socket_master.fileno():
-                s, _ = socket_master.accept()
-                print 'New socket with fd {}'.format(s.fileno())
-                poller.register(s, select.POLLIN | select.POLLHUP)
-                clients[s.fileno()] = s
-            elif fd in clients:
-                if kind & select.POLLHUP and not (kind & select.POLLIN and
-                        clients[fd].recv(1, socket.MSG_PEEK)):
-                    print 'Socket with fd {} died'.format(fd)
-                    poller.unregister(fd)
-                    del clients[fd]
-                    waiting.pop(fd, None)
-                elif kind & select.POLLIN:
-                    try:
-                        ret = handle_message(fd, clients[fd], waiting)
-                    except InvalidMessage as e:
-                        stderr.write('Invalid message ({})\n'.format(
-                            e.message))
-                        poller.unregister(fd)
-                        del clients[fd]
-                        waiting.pop(fd, None)
-                        print 'Killed socket with fd {}'.format(fd)
+                assert kind & select.POLLIN
 
-                    if ret is not None:
-                        command, args = ret
-                        print '({}, {})'.format(command, args)
-                        handle_command(clients[fd], plugged, command, args)
-                else:
-                    raise Exception('An unacceptable state of affairs has '
-                                    'arisen')
+                sock, _ = socket_master.accept()
+                print 'Socket with fd {} accepted'.format(sock.fileno())
+                sw = SocketWrapper(sock=sock, poller=poller)
+                clients[s.fileno()] = sw
+                ret = sw.receive_message()
+                if ret:
+                    items, dictionary = ret
+                    sw.handle_command(items[0], dictionary, plugged)
+            elif kind & select.POLLHUP:
+                assert fd in clients
+
+                clients[fd].close()
+                print 'Socket with fd {} closed'.format(fd)
+                del clients[fd]
+            elif kind & select.POLLIN:
+                assert fd in clients
+            elif kind & select.POLLOUT:
+                assert fd in clients
+
+                clients[fd].send_message()
             else:
                 raise Exception('An unacceptable state of affairs has '
                                 'arisen')
