@@ -19,16 +19,27 @@ block_remove_pattern = re.compile(
 
 
 class ServerSocketWrapper(SocketWrapper):
-    def interact(self):
-        pass  # TODO
+    interact_g = None
 
-    def handle_command_generator(self, command, args, plugged):
+    def interact_generator(self):
+        self.prepare_receive_message()
+        while True:
+            ret = self.receive_message()
+            if ret is not None:
+                command, args = ret
+                break
+            yield
+
+        print 'Received message {}, {}'.format(command, args)
+
         if command == 'mount':
             at = args.pop('at', None)
             if at is None:
-                self.prepare_send(
+                self.prepare_send_message(
                     'error', desc='The "at" argument is required.')
-                yield
+                while self.send_message() is None:
+                    yield
+                yield True
 
             def f(dev):
                 for field, value in args.iteritems():
@@ -38,24 +49,27 @@ class ServerSocketWrapper(SocketWrapper):
             matches = filter(f, plugged.itervalues())
 
             if len(matches) > 1:
-                self.prepare_send('error', desc='Multiple devices matched')
+                self.prepare_send_message(
+                    'error', desc='Multiple devices matched')
                 while self.send_message() is None:
                     yield
+                yield True
             if len(matches) == 0:
-                sw.prepare_send('error', desc='No devices matched')
+                sw.prepare_send_message('error', desc='No devices matched')
                 while self.send_message() is None:
                     yield
+                yield True
 
             dev_path = '/dev/' + matches[0]['name']
             # FIXME: Fork or something.
             if subprocess.call(('mount', dev_path, at)) == 0:
                 matches[0]['at'] = at
-                raise StopIteration
+                yield True
             else:
-                self.prepare_send('error', desc='Mount failed')
+                self.prepare_send_message('error', desc='Mount failed')
                 while self.send_message() is None:
                     yield
-                raise StopIteration
+                yield True
         elif command == 'unmount':
             def f(dev):
                 for field, value in args.iteritems():
@@ -65,30 +79,44 @@ class ServerSocketWrapper(SocketWrapper):
             matches = filter(f, plugged.itervalues())
 
             if len(matches) > 1:
-                self.prepare_send('error', desc='Multiple devices matched')
+                self.prepare_send_message(
+                    'error', desc='Multiple devices matched')
                 while self.send_message() is None:
                     yield
+                yield True
             if len(matches) == 0:
-                self.prepare_send('error', desc='No devices matched')
+                self.prepare_send_message('error', desc='No devices matched')
                 while self.send_message() is None:
                     yield
+                yield True
 
             dev_path = '/dev/' + matches[0]['name']
             # FIXME: Fork or something.
             if subprocess.call(('umount', dev_path)) == 0:
                 del matches[0]['at']
-                raise StopIteration
+                yield True
             else:
-                self.prepare_send('error', desc='umount failed')
+                self.prepare_send_message('error', desc='umount failed')
                 while self.send_message() is None:
                     yield
+                yield True
         else:
-            self.prepare_send('error', desc='Invalid command')
+            self.prepare_send_message('error', desc='Invalid command')
             while self.send_message() is None:
                 yield
+            yield True
 
-    def prepare_handle_command(self, command, args, plugged):
-        if not self.command_handler
+    def prepare_interact(self):
+        self.interact_g = self.interact_generator()
+        self.poller.extend(self.sock.fileno(), select.POLLIN)
+
+    def interact(self):
+        if next(self.interact_g) is not None:
+            self.interact_g = None
+            fd = self.sock.fileno()
+            self.close()
+            print 'Socket with fd {} closed'.format(fd)
+            return True
 
 
 def get_dev_identifier(path):
@@ -137,62 +165,6 @@ def handle_monitor_event(monitor_line, plugged):
         return
 
 
-class InvalidMessage(Exception):
-    pass
-
-
-def receive_message(s):
-    def get(count):
-        msg = b''
-        while True:
-            chunk = s.recv(count - len(msg))
-            msg += chunk
-            if len(msg) < count:
-                yield
-            else:
-                yield msg
-
-    def decode_length(encoded):
-        return ord(encoded[0]) ** 2**8 + ord(encoded[1])
-
-    for command_len in get(2):
-        if command_len:
-            break
-        else:
-            yield
-    command_len = decode_length(command_len)
-    if command_len == 0:
-        raise InvalidMessage('Empty command')
-
-    for command in get(command_len):
-        if command:
-            break
-        else:
-            yield
-    command = command.decode('utf_8')
-
-    args = {}
-    while True:
-        for arg_len in get(2):
-            if arg_len:
-                break
-            else:
-                yield
-        arg_len = decode_length(arg_len)
-        if arg_len == 0:
-            yield command, args
-
-        for arg in get(arg_len):
-            if arg:
-                break
-            else:
-                yield
-        arg = arg.decode('utf_8')
-
-        key, value = arg.split('=', 1)
-        args[key] = value
-
-
 def main_event_loop():
     poller = PollWrapper()
 
@@ -224,24 +196,21 @@ def main_event_loop():
 
                 sock, _ = socket_master.accept()
                 print 'Socket with fd {} accepted'.format(sock.fileno())
-                sw = SocketWrapper(sock=sock, poller=poller)
-                clients[s.fileno()] = sw
-                ret = sw.receive_message()
-                if ret:
-                    items, dictionary = ret
-                    sw.handle_command(items[0], dictionary, plugged)
+                sw = ServerSocketWrapper(sock=sock, poller=poller)
+                clients[sock.fileno()] = sw
+                sw.prepare_interact()
             elif kind & select.POLLHUP:
                 assert fd in clients
 
                 clients[fd].close()
                 print 'Socket with fd {} closed'.format(fd)
                 del clients[fd]
-            elif kind & select.POLLIN:
-                assert fd in clients
-            elif kind & select.POLLOUT:
+            elif kind & (select.POLLIN | select.POLLOUT):
                 assert fd in clients
 
-                clients[fd].send_message()
+                ret = clients[fd].interact()
+                if ret is not None:
+                    del clients[fd]
             else:
                 raise Exception('An unacceptable state of affairs has '
                                 'arisen')
