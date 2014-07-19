@@ -8,19 +8,23 @@ from time import sleep
 
 
 def send_command(s, command, **kwargs):
-    def encode_length(length):
-        return chr(length / 2**8) + chr(length % 2**8)
+    def encode_length(length, flags):
+        return chr((length / 2**8) | flags) + chr(length % 2**8)
 
     command = command.encode('utf_8')
-    msg = b'{}{}'.format(encode_length(len(command)), command)
+    msg = b'\x02{}{}'.format(encode_length(len(command), 0), command)
 
+    first = True
     for key, value in kwargs.iteritems():
         key = key.encode('utf_8')
         value = value.encode('utf_8')
-        msg += b'{}{}={}'.format(encode_length(len(key) + len(value) + 1),
-                                 key, value)
+        msg += b'{}{}'.format(
+            encode_length(len(key), 0x40 if first else 0x00), key)
+        msg += b'{}{}'.format(encode_length(len(value), 0), value)
 
-    msg += b'\x00\x00'
+        first = False
+
+    msg += b'\x80'
 
     print repr(msg)
     s.sendall(msg)
@@ -58,6 +62,12 @@ def main():
     send_command(s, command, **filters)
     if command == 'show':
         receive_list(s)
+    try:
+        while True:
+            pass
+    finally:
+        s.shutdown(socket.SHUT_RDWR)
+        s.close()
 
 
 if __name__ == '__main__':
