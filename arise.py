@@ -4,32 +4,51 @@
 from __future__ import unicode_literals
 
 import argparse
+import select
 import socket
-from sys import argv
+from sys import stderr
 from time import sleep
 
+from common import PollWrapper, SocketWrapper
 
-def send_command(s, command, **kwargs):
-    def encode_length(length, flags):
-        return chr((length / 2**8) | flags) + chr(length % 2**8)
 
-    command = command.encode('utf_8')
-    msg = b'\x02{}{}'.format(encode_length(len(command), 0), command)
+class ClientSocketWrapper(SocketWrapper):
+    interact_g = None
 
-    first = True
-    for key, value in kwargs.iteritems():
-        key = key.encode('utf_8')
-        value = value.encode('utf_8')
-        msg += b'{}{}'.format(
-            encode_length(len(key), 0x40 if first else 0x00), key)
-        msg += b'{}{}'.format(encode_length(len(value), 0), value)
+    def interact_generator(self, command, dictionary):
+        if command == 'show':  # TODO
+            raise Exception('Not implemented')
 
-        first = False
+        self.prepare_send_message(command, **dictionary)
+        while self.send_message() is None:
+            yield
 
-    msg += b'\x80'
+        self.prepare_receive_message()
+        while True:
+            ret = self.receive_message()
+            if ret is not None:
+                items, dictionary = ret
+                status = items[0]
+                break
+            yield
 
-    print repr(msg)
-    s.sendall(msg)
+        if status == 'success':
+            print 'Success!'
+        elif status == 'error':
+            stderr.write('Error: ' + dictionary['desc'] + '\n')
+        else:
+            stderr.write('Server misbehaved')
+        yield True
+
+    def prepare_interact(self, command, dictionary):
+        self.interact_g = self.interact_generator(command, dictionary)
+        self.poller.extend(self.sock.fileno(), select.POLLOUT)
+
+    def interact(self):
+        if next(self.interact_g) is not None:
+            self.interact_g = None
+            self.close()
+            return True
 
 
 def receive_list(s):
@@ -37,39 +56,44 @@ def receive_list(s):
 
 
 def main():
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.connect('/tmp/arise.sock')
-
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-m', '--mount', action='store_true')
+    group.add_argument('-m', '--mount', metavar='MOUNTPOINT')
     group.add_argument('-u', '--unmount', action='store_true')
-    group.add_argument('-a', '--automount', action='store_true')
+    group.add_argument('-a', '--automount', metavar='MOUNTPOINT')
     group.add_argument('-s', '--show', action='store_true')
     parser.add_argument('-i', '--uuid')
     parser.add_argument('-l', '--label')
     parser.add_argument('-n', '--name')
+    parser.add_argument('-o', '--mountpoint')
     args = parser.parse_args()
+
+    filters = {}
 
     for c in ('mount', 'unmount', 'automount', 'show'):
         if getattr(args, c):
             command = c
+            if c in ('mount', 'automount'):
+                filters['mountpoint'] = getattr(args, c)
             break
 
-    filters = {}
-    for f in ('uuid', 'label', 'name'):
+    for f in ('uuid', 'label', 'name', 'mountpoint'):
         if getattr(args, f) is not None:
             filters[f] = getattr(args, f)
 
-    send_command(s, command, **filters)
-    if command == 'show':
-        receive_list(s)
-    try:
-        while True:
-            pass
-    finally:
-        s.shutdown(socket.SHUT_RDWR)
-        s.close()
+    poller = PollWrapper()
+
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.connect('/tmp/arise.sock')
+
+    sw = ClientSocketWrapper(sock=sock, poller=poller)
+    sw.prepare_interact(command, filters)
+
+    while True:
+        poller.poll()
+        ret = sw.interact()
+        if ret is not None:
+            return
 
 
 if __name__ == '__main__':
