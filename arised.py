@@ -24,22 +24,23 @@ block_remove_pattern = re.compile(
 class ServerSocketWrapper(SocketWrapper):
     interact_g = None
 
-    def interact_generator(self):
+    def interact_generator(self, plugged):
         self.prepare_receive_message()
         while True:
             ret = self.receive_message()
             if ret is not None:
-                command, args = ret
+                items, args = ret
+                command = items[0]
                 break
             yield
 
         print 'Received message {}, {}'.format(command, args)
 
         if command == 'mount':
-            at = args.pop('at', None)
-            if at is None:
+            mountpoint = args.pop('mountpoint', None)
+            if mountpoint is None:
                 self.prepare_send_message(
-                    'error', desc='The "at" argument is required.')
+                    'error', desc='The "mountpoint" argument is required.')
                 while self.send_message() is None:
                     yield
                 yield True
@@ -58,15 +59,18 @@ class ServerSocketWrapper(SocketWrapper):
                     yield
                 yield True
             if len(matches) == 0:
-                sw.prepare_send_message('error', desc='No devices matched')
+                self.prepare_send_message('error', desc='No devices matched')
                 while self.send_message() is None:
                     yield
                 yield True
 
             dev_path = '/dev/' + matches[0]['name']
             # FIXME: Fork or something.
-            if subprocess.call(('mount', dev_path, at)) == 0:
-                matches[0]['at'] = at
+            if subprocess.call(('mount', dev_path, mountpoint)) == 0:
+                matches[0]['mountpoint'] = mountpoint
+                self.prepare_send_message('success')
+                while self.send_message() is None:
+                    yield
                 yield True
             else:
                 self.prepare_send_message('error', desc='Mount failed')
@@ -96,7 +100,10 @@ class ServerSocketWrapper(SocketWrapper):
             dev_path = '/dev/' + matches[0]['name']
             # FIXME: Fork or something.
             if subprocess.call(('umount', dev_path)) == 0:
-                del matches[0]['at']
+                del matches[0]['mountpoint']
+                self.prepare_send_message('success')
+                while self.send_message() is None:
+                    yield
                 yield True
             else:
                 self.prepare_send_message('error', desc='umount failed')
@@ -109,8 +116,8 @@ class ServerSocketWrapper(SocketWrapper):
                 yield
             yield True
 
-    def prepare_interact(self):
-        self.interact_g = self.interact_generator()
+    def prepare_interact(self, plugged):
+        self.interact_g = self.interact_generator(plugged)
         self.poller.extend(self.sock.fileno(), select.POLLIN)
 
     def interact(self):
@@ -201,7 +208,7 @@ def main_event_loop():
                 print 'Socket with fd {} accepted'.format(sock.fileno())
                 sw = ServerSocketWrapper(sock=sock, poller=poller)
                 clients[sock.fileno()] = sw
-                sw.prepare_interact()
+                sw.prepare_interact(plugged)
             elif kind & select.POLLHUP:
                 assert fd in clients
 
