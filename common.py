@@ -78,7 +78,7 @@ class SocketWrapper(object):
     def prepare_send_message(self, *items, **dictionary):
         max_length = max(chain(
             (len(item) for item in items),
-            (len(k) + len(v) for k, v in dictionary.iteritems())
+            (max(len(k), len(v)) for k, v in dictionary.iteritems())
         ))
 
         length_bits = 0
@@ -87,7 +87,7 @@ class SocketWrapper(object):
             length_bits += 1
         length_bytes = (length_bits + 7 + 3) / 8  # 3 reserved bits
 
-        message = chr(length_bytes)
+        message = bytearray(chr(length_bytes))
 
         for item in items:
             item = item.encode('utf_8')
@@ -102,7 +102,11 @@ class SocketWrapper(object):
             message += encode_length(len(value), length_bytes) + value
             first = False
 
-        print 'About to send message "{}"'.format(repr(message))
+        message += chr(END)
+
+        message = bytes(message)
+
+        print 'About to send message {}'.format(repr(message))
         self.send_message_g = self.send_message_generator(message)
         self.poller.extend(self.sock.fileno(), select.POLLOUT)
 
@@ -203,7 +207,7 @@ def encode_length(length, length_bytes, flags=0):
 
 
 def decode_length(encoded, length_bytes):
-    length = encoded[0] & ~(OBJECT | MAP | END)
+    length = encoded[0] & ~(OBJECT | MAP)
     for i in range(1, length_bytes):
         length <<= 8
         length += encoded[i]
