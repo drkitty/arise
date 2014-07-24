@@ -80,7 +80,8 @@ class ServerSocketWrapper(SocketWrapper):
         elif command == 'unmount':
             def f(dev):
                 for field, value in args.iteritems():
-                    if field in dev and dev[field] == value:
+                    if 'mountpoint' in dev and field in dev and \
+                            dev[field] == value:
                         return True
                 return False
             matches = filter(f, plugged.itervalues())
