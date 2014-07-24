@@ -79,11 +79,12 @@ class ServerSocketWrapper(SocketWrapper):
                 yield True
         elif command == 'unmount':
             def f(dev):
+                if 'mountpoint' not in dev:
+                    return False
                 for field, value in args.iteritems():
-                    if 'mountpoint' in dev and field in dev and \
-                            dev[field] == value:
-                        return True
-                return False
+                    if field not in dev or dev[field] != value:
+                        return False
+                return True
             matches = filter(f, plugged.itervalues())
 
             if len(matches) > 1:
