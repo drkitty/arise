@@ -121,13 +121,11 @@ class SocketWrapper(object):
         items = []
         dictionary = {}
 
-        print 'Starting length_length'
         length_length = bytearray()
         for _ in self.receive_bytes(1, into=length_length):
             yield
         length_length = length_length[0]
 
-        print 'Starting items'
         while True:
             first_byte = bytearray()
             for _ in self.peek_at_bytes(1, into=first_byte):
@@ -147,7 +145,6 @@ class SocketWrapper(object):
                 yield
             items.append(item.decode('utf_8'))
 
-        print 'Starting dictionary'
         while True:
             first_byte = bytearray()
             for _ in self.peek_at_bytes(1, into=first_byte):

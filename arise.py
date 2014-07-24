@@ -7,7 +7,6 @@ import argparse
 import select
 import socket
 from sys import stderr
-from time import sleep
 
 from common import PollWrapper, SocketWrapper
 
