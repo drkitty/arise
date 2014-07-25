@@ -47,11 +47,6 @@ class PollWrapper(object):
 class SocketWrapper(object):
     """
     (This class is not thread-safe, for what should be obvious reasons.)
-
-    To send, call setup_send_message, then call send_message until it
-    returns True.
-
-    To receive, call receive_message until it doesn't return None.
     """
 
     receiver = None
