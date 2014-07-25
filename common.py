@@ -49,8 +49,6 @@ class SocketWrapper(object):
     (This class is not thread-safe, for what should be obvious reasons.)
     """
 
-    receiver = None
-
     def __init__(self, sock, poller):
         self.sock = sock
         self.poller = poller
@@ -109,7 +107,7 @@ class SocketWrapper(object):
         ret = next(self.send_message_g)
         if ret is not None:
             self.poller.remove(self.sock.fileno(), select.POLLOUT)
-            self.send_message_g = None
+            del self.send_message_g
             return True
 
     def receive_message_generator(self):
@@ -167,7 +165,7 @@ class SocketWrapper(object):
         ret = next(self.receive_message_g)
         if ret is not None:
             self.poller.remove(self.sock.fileno(), select.POLLIN)
-            self.receive_message_g = None
+            del self.receive_message_g
             items, dictionary = ret
             return items, dictionary
 

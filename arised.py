@@ -22,8 +22,6 @@ block_remove_pattern = re.compile(
 
 
 class ServerSocketWrapper(SocketWrapper):
-    interact_g = None
-
     def interact_generator(self, plugged):
         self.prepare_receive_message()
         while True:
@@ -124,7 +122,7 @@ class ServerSocketWrapper(SocketWrapper):
 
     def interact(self):
         if next(self.interact_g) is not None:
-            self.interact_g = None
+            del self.interact_g
             fd = self.sock.fileno()
             self.close()
             print 'Socket with fd {} closed'.format(fd)

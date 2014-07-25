@@ -12,8 +12,6 @@ from common import PollWrapper, SocketWrapper
 
 
 class ClientSocketWrapper(SocketWrapper):
-    interact_g = None
-
     def interact_generator(self, command, dictionary):
         if command == 'show':  # TODO
             raise Exception('Not implemented')
@@ -45,7 +43,7 @@ class ClientSocketWrapper(SocketWrapper):
 
     def interact(self):
         if next(self.interact_g) is not None:
-            self.interact_g = None
+            del self.interact_g
             self.close()
             return True
 
