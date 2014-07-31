@@ -32,7 +32,7 @@ class ServerSocketWrapper(SocketWrapper):
                 break
             yield
 
-        print 'Received message {}, {}'.format(command, args)
+        print 'Received message {}, {}'.format(items, args)
 
         if command == 'mount':
             mountpoint = args.pop('mountpoint', None)

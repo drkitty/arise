@@ -94,9 +94,10 @@ class SocketWrapper(object):
             if flags & OBJECT:
                 self.prepare_receive_message()
                 while True:
-                    ret = self.receive_message()
-                    if ret is not None:
-                        yield ret[0], ret[1]
+                    message = self.receive_message()
+                    if message is not None:
+                        self.receive_message_g = old_g
+                        yield message
                     yield
             else:
                 thing = bytearray()
@@ -119,6 +120,7 @@ class SocketWrapper(object):
             if first_byte[0] & MAP:
                 break
             elif first_byte[0] & END:
+                next(self.receive_bytes(1, into=first_byte), None)
                 self.receive_message_g = old_g
                 yield message
 
@@ -134,6 +136,7 @@ class SocketWrapper(object):
             for _ in self.peek_at_bytes(1, into=first_byte):
                 yield
             if first_byte[0] & END:
+                next(self.receive_bytes(1, into=first_byte), None)
                 self.receive_message_g = old_g
                 yield message
 
@@ -203,7 +206,8 @@ def format_message(*items, **dictionary):
     first = True
     for key, value in dictionary.iteritems():
         if isinstance(key, tuple):
-            message += encode_length(0, length_bytes, flags=OBJECT)
+            message += encode_length(0, length_bytes,
+                                     OBJECT | (MAP if first else 0))
             message += format_message(*key[0], **key[1])
         else:
             key = key.encode('utf_8')
@@ -211,7 +215,7 @@ def format_message(*items, **dictionary):
                                      MAP if first else 0) + key
 
         if isinstance(value, tuple):
-            message += encode_length(0, length_bytes, flags=OBJECT)
+            message += encode_length(0, length_bytes, OBJECT)
             message += format_message(*value[0], **value[1])
         else:
             value = value.encode('utf_8')
