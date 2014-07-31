@@ -125,7 +125,7 @@ class ServerSocketWrapper(SocketWrapper):
             del self.interact_g
             fd = self.sock.fileno()
             self.close()
-            print 'Socket with fd {} closed'.format(fd)
+            print 'Socket with fd {} closed normally'.format(fd)
             return True
 
 
@@ -213,7 +213,8 @@ def main_event_loop():
                 assert fd in clients
 
                 clients[fd].close()
-                print 'Socket with fd {} closed'.format(fd)
+                print ('Socket with fd {} closed because the client hung '
+                       'up'.format(fd))
                 del clients[fd]
             elif kind & (select.POLLIN | select.POLLOUT):
                 assert fd in clients
