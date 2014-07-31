@@ -218,8 +218,16 @@ def main_event_loop():
             elif kind & (select.POLLIN | select.POLLOUT):
                 assert fd in clients
 
-                ret = clients[fd].interact()
-                if ret is not None:
+                try:
+                    ret = clients[fd].interact()
+                    if ret is not None:
+                        del clients[fd]
+                except socket.error as e:
+                    if e.errno != 32:  # 'Broken pipe'
+                        raise
+                    clients[fd].close()
+                    print ('Socket with fd {} closed because the client quit '
+                           'unexpectedly'.format(fd))
                     del clients[fd]
             else:
                 raise Exception('An unacceptable state of affairs has '
