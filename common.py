@@ -129,6 +129,7 @@ class SocketWrapper(object):
                 ret = next(receive_thing_g)
                 if ret is not None:
                     break
+                yield
             message[0].append(ret)
 
         while True:
@@ -140,14 +141,15 @@ class SocketWrapper(object):
                 self.receive_message_g = old_g
                 yield message
 
-            pair = [bytearray(), bytearray()]
+            pair = []
             for i in range(2):
                 receive_thing_g = receive_thing()
                 while True:
                     ret = next(receive_thing_g)
                     if ret is not None:
                         break
-                pair[i] = ret
+                    yield
+                pair.append(ret)
             message[1][pair[0]] = pair[1]
 
     def prepare_receive_message(self):
