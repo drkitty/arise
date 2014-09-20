@@ -13,29 +13,45 @@ from common import PollWrapper, SocketWrapper
 
 class ClientSocketWrapper(SocketWrapper):
     def interact_generator(self, command, dictionary):
-        if command == 'show':  # TODO
-            raise Exception('Not implemented')
+        if command == 'show':
+            self.prepare_send_message('show')
+            while self.send_message() is None:
+                yield
 
-        self.prepare_send_message(command, **dictionary)
-        while self.send_message() is None:
-            yield
-
-        self.prepare_receive_message()
-        while True:
-            ret = self.receive_message()
-            if ret is not None:
-                items, dictionary = ret
-                status = items[0]
-                break
-            yield
-
-        if status == 'success':
-            print 'Success!'
-        elif status == 'error':
-            stderr.write('Error: ' + dictionary['desc'] + '\n')
+            self.prepare_receive_message()
+            while True:
+                ret = self.receive_message()
+                if ret is not None:
+                    items, dictionary = ret
+                    break
+                yield
+            for device in items:
+                dev_items, dev_dictionary = device
+                print '{}:'.format(dev_dictionary['name'])
+                for key, value in dev_dictionary.iteritems():
+                    print '    {}="{}"'.format(key, value)
+            yield True
         else:
-            stderr.write('Server misbehaved')
-        yield True
+            self.prepare_send_message(command, **dictionary)
+            while self.send_message() is None:
+                yield
+
+            self.prepare_receive_message()
+            while True:
+                ret = self.receive_message()
+                if ret is not None:
+                    items, dictionary = ret
+                    status = items[0]
+                    break
+                yield
+
+            if status == 'success':
+                print 'Success!'
+            elif status == 'error':
+                stderr.write('Error: ' + dictionary['desc'] + '\n')
+            else:
+                stderr.write('Server misbehaved')
+            yield True
 
     def prepare_interact(self, command, dictionary):
         self.interact_g = self.interact_generator(command, dictionary)

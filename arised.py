@@ -110,6 +110,12 @@ class ServerSocketWrapper(SocketWrapper):
                 while self.send_message() is None:
                     yield
                 yield True
+        elif command == 'show':
+            self.prepare_send_message(
+                *((['device'], attrs) for attrs in plugged.itervalues()))
+            while self.send_message() is None:
+                yield
+            yield True
         else:
             self.prepare_send_message('error', desc='Invalid command')
             while self.send_message() is None:
