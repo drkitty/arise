@@ -184,10 +184,10 @@ class SocketWrapper(object):
 
 
 def format_message(*items, **dictionary):
-    max_length = max(chain(
-        (len(item) for item in items),
-        (max(len(k), len(v)) for k, v in dictionary.iteritems())
-    ))
+    length_choices = (
+        [len(item) for item in items] +
+        [max(len(k), len(v)) for k, v in dictionary.iteritems()])
+    max_length = max(length_choices) if length_choices else 0
 
     length_bits = 0
     while max_length > 0:
