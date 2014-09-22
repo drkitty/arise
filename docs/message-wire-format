@@ -3,9 +3,10 @@ domain sockets.  This document describes the format of a message and the use of
 such messages in this application.
 
 A message is a serialization of an object. An object consists of a list and a
-dictionary (map). Either or both may be empty.  List items and dictionary values
-may be bytestrings or objects; dictionary keys must be bytestrings. The format
-of a bytestring is application-defined. In this application, bytestrings are
+dictionary (map). Either or both may be empty.  List items and dictionary
+values may be bytestrings or objects; dictionary keys should be bytestrings,
+although objects are also supported at the time of writing. The format of a
+bytestring is application-defined. In this application, bytestrings are
 UTF-8-encoded strings.
 
 Here is an example message:
