@@ -51,9 +51,10 @@ class SocketWrapper(object):
 
     receive_message_g = None
 
-    def __init__(self, sock, poller):
+    def __init__(self, sock, poller, verbose=False):
         self.sock = sock
         self.poller = poller
+        self.verbose = verbose
         self.msg = b''
 
         self.poller.register(self.sock.fileno(), select.POLLHUP)
@@ -71,9 +72,12 @@ class SocketWrapper(object):
                 yield True
 
     def prepare_send_message(self, *items, **dictionary):
-        message = format_message(*items, **dictionary)
+        if self.verbose:
+            print 'About to send message {}'.format(
+                object_repr((items, dictionary)))
 
-        print 'About to send message {}'.format(repr(message))
+        message = object_to_message(*items, **dictionary)
+
         self.send_message_g = self.send_message_generator(message)
         self.poller.extend(self.sock.fileno(), select.POLLOUT)
 
@@ -162,6 +166,8 @@ class SocketWrapper(object):
         if ret is not None:
             if not self.receive_message_g:  # Outer level just finished.
                 self.poller.remove(self.sock.fileno(), select.POLLIN)
+            if self.verbose:
+                print 'Received message {}'.format(object_repr(ret))
             items, dictionary = ret
             return items, dictionary
 
@@ -183,7 +189,7 @@ class SocketWrapper(object):
             yield
 
 
-def format_message(*items, **dictionary):
+def object_to_message(*items, **dictionary):
     length_choices = (
         [len(item) for item in items] +
         [max(len(k), len(v)) for k, v in dictionary.iteritems()])
@@ -200,7 +206,7 @@ def format_message(*items, **dictionary):
     for item in items:
         if isinstance(item, tuple):
             message += encode_length(0, length_bytes, flags=OBJECT)
-            message += format_message(*item[0], **item[1])
+            message += object_to_message(*item[0], **item[1])
         else:
             item = item.encode('utf_8')
             message += encode_length(len(item), length_bytes) + item
@@ -210,7 +216,7 @@ def format_message(*items, **dictionary):
         if isinstance(key, tuple):
             message += encode_length(0, length_bytes,
                                      OBJECT | (MAP if first else 0))
-            message += format_message(*key[0], **key[1])
+            message += object_to_message(*key[0], **key[1])
         else:
             key = key.encode('utf_8')
             message += encode_length(len(key), length_bytes,
@@ -218,7 +224,7 @@ def format_message(*items, **dictionary):
 
         if isinstance(value, tuple):
             message += encode_length(0, length_bytes, OBJECT)
-            message += format_message(*value[0], **value[1])
+            message += object_to_message(*value[0], **value[1])
         else:
             value = value.encode('utf_8')
             message += encode_length(len(value), length_bytes) + value
@@ -228,6 +234,18 @@ def format_message(*items, **dictionary):
     message += chr(END)
 
     return bytes(message)
+
+
+def object_repr(obj):
+    items = [
+        object_repr(item) if isinstance(item, tuple) else item
+        for item in obj[0]]
+    dictionary = [
+        '{}={}'.format(
+            object_repr(key) if isinstance(key, tuple) else key,
+            object_repr(value) if isinstance(value, tuple) else value)
+        for key, value in obj[1].iteritems()]
+    return '({})'.format(' '.join(items + dictionary))
 
 
 def encode_length(length, length_bytes, flags=0):

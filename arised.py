@@ -32,8 +32,6 @@ class ServerSocketWrapper(SocketWrapper):
                 break
             yield
 
-        print 'Received message {}, {}'.format(items, args)
-
         if command == 'mount':
             mountpoint = args.pop('mountpoint', None)
             if mountpoint is None:
@@ -212,7 +210,8 @@ def main_event_loop():
 
                 sock, _ = socket_master.accept()
                 print 'Socket with fd {} accepted'.format(sock.fileno())
-                sw = ServerSocketWrapper(sock=sock, poller=poller)
+                sw = ServerSocketWrapper(
+                    sock=sock, poller=poller, verbose=True)
                 clients[sock.fileno()] = sw
                 sw.prepare_interact(plugged)
             elif kind & select.POLLHUP:

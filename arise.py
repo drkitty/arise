@@ -99,7 +99,7 @@ def main():
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.connect('/tmp/arise.sock')
 
-    sw = ClientSocketWrapper(sock=sock, poller=poller)
+    sw = ClientSocketWrapper(sock=sock, poller=poller, verbose=False)
     sw.prepare_interact(command, filters)
 
     while True:
