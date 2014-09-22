@@ -62,7 +62,8 @@ class ServerSocketWrapper(SocketWrapper):
 
             dev_path = '/dev/' + matches[0]['name']
             # FIXME: Fork or something.
-            if subprocess.call(('mount', dev_path, mountpoint)) == 0:
+            if subprocess.call(('mount', '-oumask=0000', dev_path,
+                                mountpoint)) == 0:
                 matches[0]['mountpoint'] = mountpoint
                 self.prepare_send_message('success')
                 while self.send_message() is None:
