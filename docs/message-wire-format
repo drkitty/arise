@@ -1,0 +1,31 @@
+This application's client and server communicate via messages sent over Unix
+domain sockets.  This document describes the format of a message and the use of
+such messages in this application.
+
+A message is a serialization of an object. An object consists of a list and a
+dictionary (map). Either or both may be empty.  List items and dictionary values
+may be bytestrings or objects; dictionary keys must be bytestrings. The format
+of a bytestring is application-defined. In this application, bytestrings are
+UTF-8-encoded strings.
+
+Here is an example message:
+
+01 04 30 31 32 33 42 34 35 26 01 03 36 37 38 80 80
+
+ ^  ^  ^        ^  ^  ^  ^  ^  ^  ^  ^     ^  ^  ^
+ |  |  +--------+  |  +--+  |  |  |  +-----+  |  |
+ a  b  c           d  e     f  g  h  i        j  k
+
+a. The length of a length is 1.
+b. The length of this item is 4.
+c. The value of this item is "0123".
+d. (0x40) A dictionary follows. (0x02) The length of this key is 2.
+e. The value of this key is "45".
+f. (0x20) This value is an object. (0x06) The length of this value is 6.
+g. The length of a length is 1.
+h. The length of this item is 3.
+i. The value of this item is "678".
+j. End object.
+k. End object.
+
+Thus, this message represents the object ("0123" "45"=("678")).
