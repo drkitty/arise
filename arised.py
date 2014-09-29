@@ -41,6 +41,8 @@ class ServerSocketWrapper(SocketWrapper):
                     yield
                 yield True
 
+            umask0000 = args.pop('umask0000', '0') == '1'
+
             def f(dev):
                 for field, value in args.iteritems():
                     if field in dev and dev[field] == value:
@@ -62,8 +64,11 @@ class ServerSocketWrapper(SocketWrapper):
 
             dev_path = '/dev/' + matches[0]['name']
             # FIXME: Fork or something.
-            if subprocess.call(('mount', '-oumask=0000', dev_path,
-                                mountpoint)) == 0:
+            cmd = ['mount']
+            if umask0000:
+                cmd.append('-oumask=0000')
+            cmd += [dev_path, mountpoint]
+            if subprocess.call(cmd) == 0:
                 matches[0]['mountpoint'] = mountpoint
                 self.prepare_send_message('success')
                 while self.send_message() is None:

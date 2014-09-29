@@ -79,6 +79,7 @@ def main():
     parser.add_argument('-l', '--label')
     parser.add_argument('-n', '--name')
     parser.add_argument('-o', '--mountpoint')
+    parser.add_argument('-U', '--umask0000', action='store_true')
     args = parser.parse_args()
 
     filters = {}
@@ -88,6 +89,7 @@ def main():
             command = c
             if c in ('mount', 'automount'):
                 filters['mountpoint'] = getattr(args, c)
+                filters['umask0000'] = '1' if args.umask0000 else '0'
             break
 
     for f in ('uuid', 'label', 'name', 'mountpoint'):
